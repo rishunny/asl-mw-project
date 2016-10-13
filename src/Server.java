@@ -8,16 +8,15 @@ import java.nio.channels.Selector;
 import java.nio.channels.ServerSocketChannel;
 import java.nio.channels.SocketChannel;
 import java.nio.channels.spi.SelectorProvider;
+import java.security.NoSuchAlgorithmException;
 import java.sql.Timestamp;
 import java.util.*;
 
 public class Server implements Runnable {
-	private MiddleWare worker;
-	// The host:port combination to listen on
+	private MiddleWare myMW;
 	private InetAddress hostAddress;
 	private int port;
 
-	//Need these for the wrapper
 	static List<String> mcAddresses;
 	static int numThreadsPTP;
 	static int writeToCount;
@@ -30,6 +29,7 @@ public class Server implements Runnable {
 
 	// The buffer into which we'll read data when it's available
 	private ByteBuffer readBuffer = ByteBuffer.allocate(2048);
+	private byte[] buff = new byte[2048];
 
 	// A list of PendingChange instances
 	private List pendingChanges = new LinkedList();
@@ -37,14 +37,15 @@ public class Server implements Runnable {
 	// Maps a SocketChannel to a list of ByteBuffer instances
 	private Map pendingData = new HashMap();
 	
-	public Server(String Ip, int Port, List<String> mcAddresses, int numThreadsPTP, int writeToCount, MiddleWare worker) throws IOException {
+	public Server(String Ip, int Port, List<String> mcAddresses, int numThreadsPTP, int writeToCount) throws IOException, NoSuchAlgorithmException {
 		this.hostAddress = InetAddress.getByName(Ip);
 		this.port = Port;
 		//Stuff from the wrapper
 		this.numThreadsPTP = numThreadsPTP;
 		this.writeToCount = writeToCount;
+		
+		this.myMW = new MiddleWare(mcAddresses, numThreadsPTP, writeToCount);
 		this.selector = this.initSelector();
-		this.worker = worker;
 	}
 
 	public void send(SocketChannel socket, byte[] data) {
@@ -53,12 +54,7 @@ public class Server implements Runnable {
 			synchronized (this.pendingData) {
 				// Indicate we want the interest operation set changed
 				this.pendingChanges.add(new ChangeRequest(socket, ChangeRequest.CHANGEOPS, SelectionKey.OP_WRITE));
-				List queue = (List) this.pendingData.get(socket);
-				if (queue == null) {
-					queue = new ArrayList();
-					this.pendingData.put(socket, queue);
-				}
-				queue.add(ByteBuffer.wrap(data));
+				this.pendingData.put(socket, ByteBuffer.wrap(data));
 				System.out.println(new Timestamp(System.currentTimeMillis()) + " Data sent to server: "+new String(data));
 				// Finally, wake up our selecting thread so it can make the required changes
 				this.selector.wakeup();
@@ -125,7 +121,7 @@ public class Server implements Runnable {
 		socketChannel.register(this.selector, SelectionKey.OP_READ);
 	}
 
-	private void read(SelectionKey key) throws IOException {
+	private void read(SelectionKey key) throws IOException, InterruptedException {
 		SocketChannel socketChannel = (SocketChannel) key.channel();
 
 		// Clear out our read buffer so it's ready for new data
@@ -151,36 +147,28 @@ public class Server implements Runnable {
 			return;
 		}
 		
+		this.readBuffer.flip();
+		this.readBuffer.get(buff);
+		
 		// Hand the data off to our worker thread
+		key.interestOps(0);
 		System.out.println(new Timestamp(System.currentTimeMillis()) + " Data read: "+ new String(this.readBuffer.array()));
-		worker.processData(this, socketChannel, this.readBuffer.array(), numRead);
-		//this.worker.processData(this, socketChannel, this.readBuffer.array(), numRead);
+		DataPacket sendPacket = new DataPacket(this, socketChannel, buff);
+		this.myMW.processData(sendPacket, numRead);
 	}
 
 	private void write(SelectionKey key) throws IOException {
 		SocketChannel socketChannel = (SocketChannel) key.channel();
 
 		synchronized (this.pendingData) {
-			List queue = (List) this.pendingData.get(socketChannel);
-
-			// Write until there's not more data ...
-			while (!queue.isEmpty()) {
-				ByteBuffer buf = (ByteBuffer) queue.get(0);
+				ByteBuffer buf = (ByteBuffer) this.pendingData.get(socketChannel);
 				socketChannel.write(buf);
-				if (buf.remaining() > 0) {
-					// ... or the socket's buffer fills up
-					break;
-				}
-				queue.remove(0);
 			}
 
-			if (queue.isEmpty()) {
-				// We wrote away all data, so we're no longer interested
-				// in writing on this socket. Switch back to waiting for
-				// data.
-				key.interestOps(SelectionKey.OP_READ);
-			}
-		}
+			// We wrote away all data, so we're no longer interested
+			// in writing on this socket. Switch back to waiting for
+			// data.
+			key.interestOps(SelectionKey.OP_READ);
 	}
 
 	private Selector initSelector() throws IOException {
@@ -202,15 +190,4 @@ public class Server implements Runnable {
 		return socketSelector;
 	}
 
-	public static void main(String[] args) {
-		try {
-			MiddleWare worker = new MiddleWare();
-			new Thread(new Server("192.168.0.11", 9091,null, -1, -1, worker)).start();
-			//MiddleWare worker = new MiddleWare();
-			//new Thread(worker).start();
-			//new Thread(new Server(null, 8080, worker)).start();
-		} catch (IOException e) {
-			e.printStackTrace();
-		}
-	}
 }

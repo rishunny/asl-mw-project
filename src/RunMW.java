@@ -3,10 +3,10 @@ import java.util.*;
 public class RunMW {
 
 	static String myIp = "192.168.0.11";
-	static int myPort = 9090;
+	static int myPort = 8080;
 	static List<String> mcAddresses = null;
-	static int numThreadsPTP = -1;
-	static int writeToCount = -1;
+	static int numThreadsPTP = 3;
+	static int writeToCount = 2;
 
 	public static void main(String[] args) throws Exception {
 
@@ -14,13 +14,13 @@ public class RunMW {
 		// Parse and prepare arguments
 		// -----------------------------------------------------------------------------
 
-		parseArguments(args);
+		//parseArguments(args);
 
 		// -----------------------------------------------------------------------------
 		// Start the Middleware
 		// -----------------------------------------------------------------------------
-
-		//new Server(myIp, myPort, mcAddresses, numThreadsPTP, writeToCount, worker).run();
+		//System.out.println(myIp + myPort + mcAddresses + numThreadsPTP + writeToCount);
+		new Server(myIp, myPort, mcAddresses, numThreadsPTP, writeToCount).run();
 	}
 
 	private static void parseArguments(String[] args) {

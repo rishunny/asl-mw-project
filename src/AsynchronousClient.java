@@ -14,70 +14,75 @@ public class AsynchronousClient implements Runnable {
 	// The host:port combination to connect to
 	private InetAddress hostAddress;
 	private int port;
-	private byte[] data = new byte[2048];
+//	private byte[] data = new byte[2048];
 	// The selector we'll be monitoring
 	private Selector selector;
-
+	
+	// internal queue 
+	
 	// The buffer into which we'll read data when it's available
-	private ByteBuffer readBuffer = ByteBuffer.allocate(2048);
+	private ByteBuffer readBuffer = ByteBuffer.allocate(8);
 
-	// A list of PendingChange instances
-	private List pendingChanges = new LinkedList();
-
-	// Maps a SocketChannel to a list of ByteBuffer instances
-	private Map pendingData = new HashMap();
 	
+	// create hashmap with key String(IP:PORT) value socketChannel
 	
-	public AsynchronousClient(InetAddress hostAddress, int port, byte[] data) throws IOException {
+	//Do the same thing as Sync in constructor
+	// pass the whole list of macAdressses
+	public AsynchronousClient(InetAddress hostAddress, int port) throws IOException {
 		this.hostAddress = hostAddress;
 		this.port = port;
+		//add setqueue and intitialise
 		this.selector = this.initSelector();
-		this.data = data;
+		// mainConnection = this.initiateConnection() hostdress port
+		// check if there is replication 
+		// for loop through all macadress and call initiateConnection with IP:PORT 
+		// hahsmap.put(IP:PORT, return)
+//		this.data = data;
 	}
 
-	public void send(Server server, SocketChannel socketserver, byte[] data) throws IOException {
-		// Start a new connection
-		SocketChannel socket = this.initiateConnection();
-		//Add packet to the queue instead of data
-		DataPacket packet = new DataPacket(server, socketserver, data);
-		// And queue the data we want written
-		synchronized (this.pendingData) {
-			List queue = (List) this.pendingData.get(socket);
-			if (queue == null) {
-				queue = new ArrayList();
-				this.pendingData.put(socket, queue);
-			}
-			queue.add(packet);
-			//System.out.println("Sent data: " + new String(packet.data));
-		}
-
-		// Finally, wake up our selecting thread so it can make the required changes
-		this.selector.wakeup();
-	}
+//	public void send(Server server, SocketChannel socketserver, byte[] data) throws IOException {
+//		// Start a new connection
+//		SocketChannel socket = this.initiateConnection();
+//		//Add packet to the queue instead of data
+//		DataPacket packet = new DataPacket(server, socketserver, data);
+//		// And queue the data we want written
+//		synchronized (this.pendingData) {
+//			this.pendingData.put(socket, packet);
+//		}
+//		// Finally, wake up our selecting thread so it can make the required changes
+//		this.selector.wakeup();
+//	}
 
 	public void run() {
 		while (true) {
 			try {
 				// Process any pending changes
-				synchronized (this.pendingChanges) {
-					Iterator changes = this.pendingChanges.iterator();
-					while (changes.hasNext()) {
-						ChangeRequest change = (ChangeRequest) changes.next();
-						switch (change.type) {
-						case ChangeRequest.CHANGEOPS:
-							SelectionKey key = change.socket.keyFor(this.selector);
-							key.interestOps(change.ops);
-							break;
-						case ChangeRequest.REGISTER:
-							change.socket.register(this.selector, change.ops);
-							break;
-						}
-					}
-					this.pendingChanges.clear();
-				}
+//				synchronized (this.pendingChanges) {
+//					Iterator changes = this.pendingChanges.iterator();
+//					while (changes.hasNext()) {
+//						ChangeRequest change = (ChangeRequest) changes.next();
+//						switch (change.type) {
+//						case ChangeRequest.CHANGEOPS:
+//							SelectionKey key = change.socket.keyFor(this.selector);
+//							key.interestOps(change.ops);
+//							break;
+//						case ChangeRequest.REGISTER:
+//							change.socket.register(this.selector, change.ops);
+//							break;
+//						}
+//					}
+//					this.pendingChanges.clear();
+//				}
+				
+				// setQueue.poll dataPocket
+				// initialise GlobalDataPacket put
+				// mainConnectio.keyFor(selector).register(....OP_WRITE);
+				// check for replication
+				// go through replicaserver list in DataPacket
+				// hashmap.get(IP:PORT).keyFor(selector).register(....OP_WRITE);
 
 				// Wait for an event one of the registered channels
-				this.selector.select();
+				this.selector.select();// selectNow
 
 				// Iterate over the set of keys for which events are available
 				Iterator selectedKeys = this.selector.selectedKeys().iterator();
@@ -128,37 +133,30 @@ public class AsynchronousClient implements Runnable {
 			return;
 		}
 		
-		System.out.println("Memcached Response: " + new String(readBuffer.array()));
-		synchronized (this.pendingData) {
-			List queue = (List) this.pendingData.get(socketChannel);
-			// Read and send until there's no more data ...
-			while (!queue.isEmpty()) {
-				DataPacket packet = (DataPacket) queue.get(0);
-				packet.server.send(packet.socket, readBuffer.array());
-				queue.remove(0);
-			}
-			this.pendingData.remove(socketChannel);
-		}
-
+		
+		// check for replication
+		// if its not 
+		// globalDataPacket.poll();
+		// globalData.server.send(global.data, ...) DataPacket type 
+		// if replica
+		//  increment responseCounter, 
+		// if failed; responseFailed
+		// reponsCounter == replica && !responceFailed => globalDataPacket.poll();
+		
+		
 	}
 
 
 	private void write(SelectionKey key) throws IOException {
 		SocketChannel socketChannel = (SocketChannel) key.channel();
-		synchronized (this.pendingData) {
-			List queue = (List) this.pendingData.get(socketChannel);
-			for (int i = 0; i < queue.size(); i++) {
-				// Write until there's not more data ...
-				DataPacket packet = (DataPacket) queue.get(i);
-				ByteBuffer buf = ByteBuffer.wrap(packet.data);
-				socketChannel.write(buf);
-				//System.out.println("Command: "+new String(packet.data));
-			}
-			// We wrote away all data, so we're no longer interested
-			// in writing on this socket. Switch back to waiting for
-			// data.
-			key.interestOps(SelectionKey.OP_READ);
-		}
+		// packet = globalPacket.peekLast()
+//			DataPacket packet = (DataPacket) this.pendingData.get(socketChannel);
+			ByteBuffer buf = ByteBuffer.wrap(packet.data);
+			socketChannel.write(buf);
+		// We wrote away all data, so we're no longer interested
+		// in writing on this socket. Switch back to waiting for
+		// data.
+		key.interestOps(SelectionKey.OP_READ);
 	}
 
 	private void finishConnection(SelectionKey key) throws IOException {
@@ -179,21 +177,18 @@ public class AsynchronousClient implements Runnable {
 		key.interestOps(SelectionKey.OP_WRITE);
 	}
 
-	private SocketChannel initiateConnection() throws IOException {
+	private SocketChannel initiateConnection(arg1, arg2) throws IOException {
 		// Create a non-blocking socket channel
 		SocketChannel socketChannel = SocketChannel.open();
 		socketChannel.configureBlocking(false);
 	
 		// Kick off connection establishment
-		socketChannel.connect(new InetSocketAddress(this.hostAddress, this.port));
+		socketChannel.connect(new InetSocketAddress(arg1, arg2));
 	
 		// Queue a channel registration since the caller is not the 
 		// selecting thread. As part of the registration we'll register
 		// an interest in connection events. These are raised when a channel
 		// is ready to complete connection establishment.
-		synchronized(this.pendingChanges) {
-			this.pendingChanges.add(new ChangeRequest(socketChannel, ChangeRequest.REGISTER, SelectionKey.OP_CONNECT));
-		}
 		
 		return socketChannel;
 	}

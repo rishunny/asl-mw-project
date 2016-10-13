@@ -25,11 +25,17 @@
     <mkdir dir="${dist}"/>
     <!-- Put everything in ${build} into the jar file -->
     <jar jarfile="${dist}/middleware-${nethzid}.jar" basedir="${build}" compress="true">
-      <fileset dir="${src}" includes="**/*.java"/>
+      <fileset dir="${src}" includes="/*.java"/>
       <manifest>
         <attribute name="Main-Class" value="RunMW"/>
       </manifest>
     </jar>
+  </target>
+  
+  <target name="run" depends="jar">
+    <java jar="${dist}/middleware-${nethzid}.jar" fork="true">
+	  <arg line = "${args}"/>
+    </java>
   </target>
 
   <target name="clean"
