@@ -45,7 +45,6 @@ public class ConsistentHash<T> {
 			bigres = tailMap.isEmpty() ?
 					circle.firstKey() : tailMap.firstKey();
 		}
-		System.out.println(bigres);
 		return circle.get(bigres);
 	} 
 

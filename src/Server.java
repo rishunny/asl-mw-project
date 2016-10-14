@@ -17,7 +17,7 @@ public class Server implements Runnable {
 	private InetAddress hostAddress;
 	private int port;
 
-	static List<String> mcAddresses;
+	public List<String> mcAddresses;
 	static int numThreadsPTP;
 	static int writeToCount;
 
@@ -29,8 +29,6 @@ public class Server implements Runnable {
 
 	// The buffer into which we'll read data when it's available
 	private ByteBuffer readBuffer = ByteBuffer.allocate(2048);
-	private byte[] buff = new byte[2048];
-
 	// A list of PendingChange instances
 	private List pendingChanges = new LinkedList();
 
@@ -43,7 +41,6 @@ public class Server implements Runnable {
 		//Stuff from the wrapper
 		this.numThreadsPTP = numThreadsPTP;
 		this.writeToCount = writeToCount;
-		
 		this.myMW = new MiddleWare(mcAddresses, numThreadsPTP, writeToCount);
 		this.selector = this.initSelector();
 	}
@@ -55,7 +52,7 @@ public class Server implements Runnable {
 				// Indicate we want the interest operation set changed
 				this.pendingChanges.add(new ChangeRequest(socket, ChangeRequest.CHANGEOPS, SelectionKey.OP_WRITE));
 				this.pendingData.put(socket, ByteBuffer.wrap(data));
-				System.out.println(new Timestamp(System.currentTimeMillis()) + " Data sent to server: "+new String(data));
+				//System.out.println(new Timestamp(System.currentTimeMillis()) + " Data sent to server: "+new String(data));
 				// Finally, wake up our selecting thread so it can make the required changes
 				this.selector.wakeup();
 			}
@@ -146,15 +143,15 @@ public class Server implements Runnable {
 			key.cancel();
 			return;
 		}
-		
+		byte[] buff = new byte[this.readBuffer.position()];
 		this.readBuffer.flip();
 		this.readBuffer.get(buff);
-		
+		//System.out.println("Sent to middleware:" + new String(buff).trim());
 		// Hand the data off to our worker thread
-		key.interestOps(0);
-		System.out.println(new Timestamp(System.currentTimeMillis()) + " Data read: "+ new String(this.readBuffer.array()));
+		//System.out.println(new Timestamp(System.currentTimeMillis()) + " Data read: "+ new String(buff));
 		DataPacket sendPacket = new DataPacket(this, socketChannel, buff);
 		this.myMW.processData(sendPacket, numRead);
+		key.interestOps(0);
 	}
 
 	private void write(SelectionKey key) throws IOException {
@@ -163,12 +160,14 @@ public class Server implements Runnable {
 		synchronized (this.pendingData) {
 				ByteBuffer buf = (ByteBuffer) this.pendingData.get(socketChannel);
 				socketChannel.write(buf);
+				//System.out.println("Sent to memaslap: "+new String(buf.array()));
+				key.interestOps(SelectionKey.OP_READ);
+
 			}
 
 			// We wrote away all data, so we're no longer interested
 			// in writing on this socket. Switch back to waiting for
 			// data.
-			key.interestOps(SelectionKey.OP_READ);
 	}
 
 	private Selector initSelector() throws IOException {
@@ -188,6 +187,17 @@ public class Server implements Runnable {
 		serverChannel.register(socketSelector, SelectionKey.OP_ACCEPT);
 
 		return socketSelector;
+	}
+	
+	public static void main(String[] args) throws NoSuchAlgorithmException, IOException{
+	List<String> addresses = new ArrayList<String>();
+	String ip1 = "192.168.0.27:11214";
+	String ip2 = "192.168.0.27:11212";
+	String ip3 = "192.168.0.27:11213";
+	addresses.add(ip1);
+	addresses.add(ip2);
+	addresses.add(ip3);
+	new Thread(new Server("192.168.0.11", 9090, addresses, 4, 1)).run();
 	}
 
 }

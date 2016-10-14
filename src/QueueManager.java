@@ -4,6 +4,7 @@ import java.util.concurrent.ArrayBlockingQueue;
 public class QueueManager {
 	public ArrayBlockingQueue<DataPacket> getQueue;
 	public ArrayBlockingQueue<DataPacket> setQueue;
+	public AsynchronousClient asyncClient;
 	
 	public QueueManager(int sizeQueue)
 	{

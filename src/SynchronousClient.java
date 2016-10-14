@@ -43,9 +43,13 @@ public class SynchronousClient implements Runnable {
 				e.printStackTrace();
 			}
 			try {
-				this.socketChannel.read(readBuffer);
-				packet.server.send(packet.socket, readBuffer.array());
 				readBuffer.clear();
+				this.socketChannel.read(readBuffer);
+				byte[] response = new byte[readBuffer.position()];
+				readBuffer.flip();
+				readBuffer.get(response);
+				packet.server.send(packet.socket, response);
+//				packet.server.send(packet.socket, readBuffer.array());
 			} catch (IOException e) {
 				// TODO Auto-generated catch block
 				e.printStackTrace();
