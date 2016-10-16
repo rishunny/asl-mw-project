@@ -1,5 +1,4 @@
 import java.io.IOException;
-import java.net.InetAddress;
 import java.net.UnknownHostException;
 import java.nio.ByteBuffer;
 import java.nio.channels.SocketChannel;
@@ -7,7 +6,6 @@ import java.security.NoSuchAlgorithmException;
 import java.util.HashMap;
 import java.util.List;
 import java.util.concurrent.ArrayBlockingQueue;
-import java.util.concurrent.ThreadPoolExecutor;
 import java.util.concurrent.TimeUnit;
 
 public class MiddleWare{
@@ -33,7 +31,7 @@ public class MiddleWare{
 		}
 
 
-		hashKeytoServer = new ConsistentHash<String>(1,mcAddresses);
+		hashKeytoServer = new ConsistentHash<String>(200,mcAddresses);
 		//create an instance of the consistent hashing class
 
 	}
@@ -49,7 +47,7 @@ public class MiddleWare{
 			//System.out.println("Command set: "+ data_string);
 			List<String> serverAddresses = hashKeytoServer.getWithReplication(key, numReplications);
 			sendPacket.setReplicaServers(serverAddresses);
-			System.out.println(serverAddresses);
+			//System.out.println(serverAddresses);
 			QueuePointer.get(serverAddresses.get(0)).setQueue.put(sendPacket);
 			QueuePointer.get(serverAddresses.get(0)).asyncClient.modifySelector();
 		}

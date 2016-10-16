@@ -14,15 +14,20 @@ public class ConsistentHash<T> {
 	private final int numberOfReplicas;
 	private final SortedMap<BigInteger, String> circle =
 			new TreeMap<BigInteger, String>();
-
+	private HashMap<String,Integer> Position = new HashMap<String, Integer>();
+	private List<String> serverList = new ArrayList<String>();
 	public ConsistentHash(int numberOfReplicas, Collection<String> nodes) throws NoSuchAlgorithmException {
 
 		this.hashFunction = MessageDigest.getInstance("MD5");
 		this.numberOfReplicas = numberOfReplicas;
-
+		int i = 0;
 		for (String node : nodes) {
 			add(node);
+			serverList.add(node);
+			Position.put(node, i);
+			i++;
 		}
+
 	}
 
 	public void add(String node) {
@@ -48,7 +53,7 @@ public class ConsistentHash<T> {
 		return circle.get(bigres);
 	} 
 
-	public List<String> getWithReplication(byte[] key, int replicationFactor) {
+	public List<String> getWithReplicationOld(byte[] key, int replicationFactor) {
 		List<String> result = new ArrayList<String>();
 		int i = 1;
 		HashMap<String, Boolean> addedHash = new HashMap<String, Boolean>();
@@ -98,29 +103,48 @@ public class ConsistentHash<T> {
 		return result;
 	} 
 
-//	public static void main(String[] args) throws NoSuchAlgorithmException{
-//		List<String> addresses = new ArrayList<String>();
-//		String ip1 = "192.168.1.1:8080";
-//		String ip2 = "192.168.1.2:8080";
-//		String ip3 = "192.168.1.3:8080";
-//		String ip4 = "192.168.1.4:8080";
-//		String ip5 = "192.168.1.5:8080";
-//		String ip6 = "192.168.1.6:8080";
-//		addresses.add(ip1);
-//		addresses.add(ip2);
-//		addresses.add(ip3);
-//		addresses.add(ip4);
-//		addresses.add(ip5);
-//		addresses.add(ip6);
-//		//System.out.println(addresses);
-//		ConsistentHash<String> hash = new ConsistentHash<String>(200,addresses);
-//		for(int i = 0; i < 10000; i++)
-//		{
-//			String uuid = UUID.randomUUID().toString();
-//			byte[] random = uuid.getBytes();
-//			System.out.println(hash.getWithReplication(random,3));
-//			//System.out.println(hash.get(random));
-//		}
-//	}
+	public List<String> getWithReplication(byte[] key, int replicationFactor) {
+		List<String> result = new ArrayList<String>();
+		String primaryServer = this.get(key);
+		int pos = Position.get(primaryServer);
+		int i = 1;
+		result.add(primaryServer);
+		while(i!=replicationFactor)
+		{
+			pos++;
+			if(pos==serverList.size())
+			{
+				pos = 0;
+			}
+			result.add(serverList.get(pos));
+			i++;
+		}	
+		return result;
+	} 
+
+	//	public static void main(String[] args) throws NoSuchAlgorithmException{
+	//		List<String> addresses = new ArrayList<String>();
+	//		String ip1 = "192.168.1.1:8080";
+	//		String ip2 = "192.168.1.2:8080";
+	//		String ip3 = "192.168.1.3:8080";
+	//		String ip4 = "192.168.1.4:8080";
+	//		String ip5 = "192.168.1.5:8080";
+	//		String ip6 = "192.168.1.6:8080";
+	//		addresses.add(ip1);
+	//		addresses.add(ip2);
+	//		addresses.add(ip3);
+	//		addresses.add(ip4);
+	//		addresses.add(ip5);
+	//		addresses.add(ip6);
+	//		//System.out.println(addresses);
+	//		ConsistentHash<String> hash = new ConsistentHash<String>(200,addresses);
+	//		for(int i = 0; i < 10000; i++)
+	//		{
+	//			String uuid = UUID.randomUUID().toString();
+	//			byte[] random = uuid.getBytes();
+	//			System.out.println(hash.getWithReplication(random,3));
+	//			//System.out.println(hash.get(random));
+	//		}
+	//	}
 
 }

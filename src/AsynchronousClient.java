@@ -25,8 +25,8 @@ public class AsynchronousClient implements Runnable {
 	private HashMap<String, SocketChannel> AddresstoSocket = new HashMap<String, SocketChannel>();
 	private ByteBuffer readBuffer = ByteBuffer.allocate(2048);
 	private Selector selector;
-	private ByteBuffer storedmessage;
-	private ByteBuffer errormessage;
+	private byte[] storedmessage;
+	private byte[] errormessage;
 	// internal queue 
 	//make HashMap of counter and socket 
 	//HashMap of datapacket and global replication
@@ -139,61 +139,46 @@ public class AsynchronousClient implements Runnable {
 			this.readBuffer.get(receivedData);
 			//System.out.println("Data from memcached: "+new String(receivedData));
 			String[] newdata = new String(receivedData).split("\n");
-			System.out.println("Length of response: " + newdata.length);
-			//			if(this.numReplications == 1)
-			//			{
-			//				DataPacket newpacket = checkPackets.get(0);
-			//				newpacket.server.send(newpacket.socket, readBuffer.array());
-			//				if(checkPackets.size()==1)
-			//					checkPackets.clear();
-			//				else if(checkPackets.size()>1)
-			//					checkPackets.remove(0);
-			//				if(!checkPackets.isEmpty())
-			//					newpacket = checkPackets.get(0);
-			//
-			//			}
-
+//			if(newdata.length > 1)
+//				System.out.println("Length of response: " + newdata.length);
 			int reqCount = requestCount.get(socketChannel);
 			requestCount.put(socketChannel, reqCount+newdata.length);
-			System.out.println("Request length is: "+requestCount.get(socketChannel)+" Socket: "+socketChannel);
+			//System.out.println("Request length is: "+requestCount.get(socketChannel)+" Socket: "+socketChannel);
 			//requestCount.put(socketChannel, newdata.length);
 			for(int j = reqCount; j < requestCount.get(socketChannel) && j >= 0; j++)
 			{
 				DataPacket newpacket = checkPackets.get(j);
 				int repCount = replicationCounter.get(newpacket);
 				repCount = repCount + 1;
-				//if(!newdata[j-reqCount].contains("STORED"))
-				//{
-				//newpacket.ERROR_MESSAGE = true;
-				//this.errormessage = ByteBuffer.wrap(newdata[j-reqCount].getBytes());
-				//System.out.println("OH NO.");
+				if(!newdata[j-reqCount].contains("STORED"))
+				{
+				newpacket.ERROR_MESSAGE = true;
+				this.errormessage = (newdata[j-reqCount]+"\n").getBytes();
+//				System.out.println("OH NO.");
+//				System.out.println(newdata[j-reqCount]);
+				}
+				else
+				{
+				this.storedmessage = (newdata[j-reqCount]+"\n").getBytes();
 				//System.out.println(newdata[j-reqCount]);
-				//}
-				//else
-				//{
-				//this.storedmessage = ByteBuffer.wrap(newdata[j-reqCount].getBytes());
-				//System.out.println(newdata[j-reqCount]);
-				//}
+				}
 				if(repCount == this.numReplications)
 				{
 					replicationCounter.remove(newpacket);
-					//System.out.println("My HashMap has: " + requestCount.get(socketChannel));
 					if(newpacket.ERROR_MESSAGE){
 						//System.out.println("Incorrect: "+ new String(errormessage.array()));
-						newpacket.server.send(newpacket.socket, this.readBuffer.array());
+						newpacket.server.send(newpacket.socket, this.errormessage);
 					}
 					else
 					{
 						//System.out.print("Correct: "+ new String(newdata[j-reqCount].getBytes()));
-						newpacket.server.send(newpacket.socket, this.readBuffer.array());
+						newpacket.server.send(newpacket.socket, this.storedmessage);
 					}
 					//remove loops
 					for(String node: newpacket.replicaServers)
 					{
 						SocketChannel tmpRepSocket = AddresstoSocket.get(node);
-						System.out.println("Socket: "+tmpRepSocket);
 						int tmpreqCount = requestCount.get(tmpRepSocket);
-						System.out.println("Request number is:" + tmpreqCount);
 						requestCount.put(tmpRepSocket, tmpreqCount-1);
 					}
 					checkPackets.remove(j);

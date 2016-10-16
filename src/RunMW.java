@@ -2,11 +2,11 @@ import java.util.*;
 
 public class RunMW {
 
-	static String myIp = "192.168.0.11";
-	static int myPort = 8080;
+	static String myIp = null;
+	static int myPort;
 	static List<String> mcAddresses = null;
-	static int numThreadsPTP = 3;
-	static int writeToCount = 2;
+	static int numThreadsPTP;
+	static int writeToCount;
 
 	public static void main(String[] args) throws Exception {
 
@@ -14,7 +14,7 @@ public class RunMW {
 		// Parse and prepare arguments
 		// -----------------------------------------------------------------------------
 
-		//parseArguments(args);
+		parseArguments(args);
 
 		// -----------------------------------------------------------------------------
 		// Start the Middleware
