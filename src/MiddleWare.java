@@ -33,7 +33,7 @@ public class MiddleWare{
 		}
 
 
-		hashKeytoServer = new ConsistentHash<String>(200,mcAddresses);
+		hashKeytoServer = new ConsistentHash<String>(1,mcAddresses);
 		//create an instance of the consistent hashing class
 
 	}
@@ -49,6 +49,7 @@ public class MiddleWare{
 			//System.out.println("Command set: "+ data_string);
 			List<String> serverAddresses = hashKeytoServer.getWithReplication(key, numReplications);
 			sendPacket.setReplicaServers(serverAddresses);
+			System.out.println(serverAddresses);
 			QueuePointer.get(serverAddresses.get(0)).setQueue.put(sendPacket);
 			QueuePointer.get(serverAddresses.get(0)).asyncClient.modifySelector();
 		}

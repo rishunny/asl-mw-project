@@ -160,7 +160,7 @@ public class Server implements Runnable {
 		synchronized (this.pendingData) {
 				ByteBuffer buf = (ByteBuffer) this.pendingData.get(socketChannel);
 				socketChannel.write(buf);
-				//System.out.println("Sent to memaslap: "+new String(buf.array()));
+				System.out.println("Sent to memaslap: "+new String(buf.array()));
 				key.interestOps(SelectionKey.OP_READ);
 
 			}
@@ -191,13 +191,13 @@ public class Server implements Runnable {
 	
 	public static void main(String[] args) throws NoSuchAlgorithmException, IOException{
 	List<String> addresses = new ArrayList<String>();
-	String ip1 = "192.168.0.27:11214";
-	String ip2 = "192.168.0.27:11212";
-	String ip3 = "192.168.0.27:11213";
+	String ip1 = "192.168.0.40:11212";
+	String ip2 = "192.168.0.40:11213";
+	String ip3 = "192.168.0.40:11214";
 	addresses.add(ip1);
 	addresses.add(ip2);
 	addresses.add(ip3);
-	new Thread(new Server("192.168.0.11", 9090, addresses, 4, 1)).run();
+	new Thread(new Server("192.168.0.11", 9090, addresses, 4, 3)).run();
 	}
 
 }
