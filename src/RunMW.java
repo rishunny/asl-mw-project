@@ -20,7 +20,7 @@ public class RunMW {
 		// Start the Middleware
 		// -----------------------------------------------------------------------------
 		//System.out.println(myIp + myPort + mcAddresses + numThreadsPTP + writeToCount);
-		new Server(myIp, myPort, mcAddresses, numThreadsPTP, writeToCount).run();
+		new Manager(myIp, myPort, mcAddresses, numThreadsPTP, writeToCount).run();
 	}
 
 	private static void parseArguments(String[] args) {

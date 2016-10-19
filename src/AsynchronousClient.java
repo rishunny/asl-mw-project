@@ -60,6 +60,7 @@ public class AsynchronousClient implements Runnable {
 		this.socketChannel.connect(new InetSocketAddress(this.hostAddress, this.port));
 	}
 
+	@Override
 	public void run() {
 		while (true) {
 			try {	
@@ -67,7 +68,9 @@ public class AsynchronousClient implements Runnable {
 				if(packet!=null)
 				{
 					checkPackets.add(packet);
+					packet.Tqueue = System.nanoTime() - packet.Tqueue;
 					replicationCounter.put(packet, 0);
+					packet.Tserver = System.nanoTime();
 					this.socketChannel.write(ByteBuffer.wrap(packet.data));
 					this.socketChannel.keyFor(this.selector).interestOps(SelectionKey.OP_READ);
 					if(this.numReplications > 1)
@@ -118,12 +121,7 @@ public class AsynchronousClient implements Runnable {
 		try {
 			numRead = socketChannel.read(this.readBuffer);
 		} catch (IOException e) {
-			// The remote forcibly closed the connection, cancel
-			// the selection key and close the channel.
-
-			//			key.cancel();
-			//			System.out.println("CLOSE SOCKET 1");
-			//			socketChannel.close();
+			e.printStackTrace();
 			return;
 		}
 
@@ -139,41 +137,48 @@ public class AsynchronousClient implements Runnable {
 			this.readBuffer.get(receivedData);
 			//System.out.println("Data from memcached: "+new String(receivedData));
 			String[] newdata = new String(receivedData).split("\n");
-//			if(newdata.length > 1)
-//				System.out.println("Length of response: " + newdata.length);
+			//			if(newdata.length > 1)
+			//				System.out.println("Length of response: " + newdata.length);
 			int reqCount = requestCount.get(socketChannel);
 			requestCount.put(socketChannel, reqCount+newdata.length);
-			//System.out.println("Request length is: "+requestCount.get(socketChannel)+" Socket: "+socketChannel);
-			//requestCount.put(socketChannel, newdata.length);
 			for(int j = reqCount; j < requestCount.get(socketChannel) && j >= 0; j++)
 			{
 				DataPacket newpacket = checkPackets.get(j);
 				int repCount = replicationCounter.get(newpacket);
 				repCount = repCount + 1;
-				if(!newdata[j-reqCount].contains("STORED"))
+				if(newdata[j-reqCount].contains("NOT_STORED") || newdata[j-reqCount].contains("NOT_FOUND"))
 				{
-				newpacket.ERROR_MESSAGE = true;
-				this.errormessage = (newdata[j-reqCount]+"\n").getBytes();
-//				System.out.println("OH NO.");
-//				System.out.println(newdata[j-reqCount]);
+					newpacket.ERROR_MESSAGE = true;
+					this.errormessage = (newdata[j-reqCount]+"\n").getBytes();
+					//System.out.println(newdata[j-reqCount]);
 				}
 				else
 				{
-				this.storedmessage = (newdata[j-reqCount]+"\n").getBytes();
-				//System.out.println(newdata[j-reqCount]);
+					this.storedmessage = (newdata[j-reqCount]+"\n").getBytes();
+					//System.out.println(newdata[j-reqCount]);
 				}
 				if(repCount == this.numReplications)
 				{
 					replicationCounter.remove(newpacket);
+					newpacket.Tserver = System.nanoTime() - newpacket.Tserver;
+					newpacket.Tmw = System.nanoTime() - newpacket.Tmw;
 					if(newpacket.ERROR_MESSAGE){
 						//System.out.println("Incorrect: "+ new String(errormessage.array()));
-						newpacket.server.send(newpacket.socket, this.errormessage);
+						newpacket.Fsuccess = false;
+						newpacket.manager.send(newpacket.socket, this.errormessage);
 					}
 					else
 					{
 						//System.out.print("Correct: "+ new String(newdata[j-reqCount].getBytes()));
-						newpacket.server.send(newpacket.socket, this.storedmessage);
+						newpacket.manager.send(newpacket.socket, this.storedmessage);
 					}
+					if(newpacket.manager.setcounter%100 == 0)
+					{
+						// String logMsg = String.format("SET %d %d %d %d", , time2);
+						String logMsg = String.format("SET "+ newpacket.Tmw/1000 + " " + newpacket.Tqueue/1000 + " " + newpacket.Tserver/1000 + " " + newpacket.Fsuccess);
+						newpacket.manager.myLogger.info(logMsg);
+					}
+
 					//remove loops
 					for(String node: newpacket.replicaServers)
 					{
@@ -220,7 +225,6 @@ public class AsynchronousClient implements Runnable {
 			// Cancel the channel's registration with our selector
 			System.out.println(e);
 			key.cancel();
-			System.out.println("CLOSE SOCKET 2");
 			return;
 		}
 	}

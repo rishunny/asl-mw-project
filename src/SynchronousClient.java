@@ -16,7 +16,6 @@ public class SynchronousClient implements Runnable {
 	// The buffer into which we'll read data when it's available
 	private ByteBuffer readBuffer = ByteBuffer.allocate(2048);
 
-
 	public SynchronousClient(String hostAddress, ArrayBlockingQueue<DataPacket> getQueue) throws IOException {
 		this.getQueue = getQueue;
 		this.hostAddress = InetAddress.getByName(hostAddress.split(":")[0]);
@@ -28,28 +27,41 @@ public class SynchronousClient implements Runnable {
 		this.socketChannel.connect(new InetSocketAddress(this.hostAddress, this.port));
 	}
 
+	@Override
 	public void run() {
 		while(true){	
 			try {
 				packet = this.getQueue.take();
+				packet.Tqueue = System.nanoTime() - packet.Tqueue;
 			} catch (InterruptedException e1) {
 				// TODO Auto-generated catch block
 				e1.printStackTrace();
 			}
 			try {
+				packet.Tserver = System.nanoTime();
 				this.socketChannel.write(ByteBuffer.wrap(packet.data));
 			} catch (IOException e) {
 				// TODO Auto-generated catch block
 				e.printStackTrace();
 			}
 			try {
+				packet.Tserver = System.nanoTime() - packet.Tserver;
+				packet.Tmw = System.nanoTime() - packet.Tmw;
 				readBuffer.clear();
 				this.socketChannel.read(readBuffer);
 				byte[] response = new byte[readBuffer.position()];
 				readBuffer.flip();
 				readBuffer.get(response);
-				packet.server.send(packet.socket, response);
-//				packet.server.send(packet.socket, readBuffer.array());
+				if(new String(response).equals("END\r\n"))
+				{
+					packet.Fsuccess = false;
+				}
+				packet.manager.send(packet.socket, response);
+				if(packet.manager.getcounter%10000 == 0)
+				{
+					String logMsg = String.format("GET "+ packet.Tmw/1000 + " " + packet.Tqueue/1000 + " " + packet.Tserver/1000 + " " + packet.Fsuccess);
+					packet.manager.myLogger.info(logMsg);
+				}
 			} catch (IOException e) {
 				// TODO Auto-generated catch block
 				e.printStackTrace();

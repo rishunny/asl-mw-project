@@ -9,8 +9,12 @@ import java.nio.channels.SocketChannel;
 import java.nio.channels.spi.SelectorProvider;
 import java.security.NoSuchAlgorithmException;
 import java.util.*;
+import java.util.logging.FileHandler;
+import java.util.logging.Logger;
+import java.util.logging.Level;
+import java.util.logging.SimpleFormatter;
 
-public class Server implements Runnable {
+public class Manager implements Runnable {
 	private MiddleWare myMW;
 	private InetAddress hostAddress;
 	private int port;
@@ -33,7 +37,12 @@ public class Server implements Runnable {
 	// Maps a SocketChannel to a list of ByteBuffer instances
 	private Map pendingData = new HashMap();
 	
-	public Server(String Ip, int Port, List<String> mcAddresses, int numThreadsPTP, int writeToCount) throws IOException, NoSuchAlgorithmException {
+	public long setcounter = 0;
+	public long getcounter = 0;
+	public Logger myLogger = Logger.getLogger("MiddleWare");
+	private SimpleFormatter simpleFormatter = new SimpleFormatter();
+	
+	public Manager(String Ip, int Port, List<String> mcAddresses, int numThreadsPTP, int writeToCount) throws IOException, NoSuchAlgorithmException {
 		this.hostAddress = InetAddress.getByName(Ip);
 		this.port = Port;
 		//Stuff from the wrapper
@@ -41,6 +50,12 @@ public class Server implements Runnable {
 		this.writeToCount = writeToCount;
 		this.myMW = new MiddleWare(mcAddresses, this.numThreadsPTP, this.writeToCount);
 		this.selector = this.initSelector();
+		this.myLogger.setLevel(Level.INFO);
+		FileHandler file = new FileHandler("setgetData.log");
+		file.setFormatter(simpleFormatter);
+		this.myLogger.addHandler(file);
+		this.myLogger.setUseParentHandlers(false);
+
 	}
 
 	public void send(SocketChannel socket, byte[] data) {
@@ -57,6 +72,7 @@ public class Server implements Runnable {
 		}
 	}
 
+	@Override
 	public void run() {
 		while (true) {
 			try {
@@ -82,11 +98,9 @@ public class Server implements Runnable {
 				while (selectedKeys.hasNext()) {
 					SelectionKey key = (SelectionKey) selectedKeys.next();
 					selectedKeys.remove();
-
 					if (!key.isValid()) {
 						continue;
 					}
-
 					// Check what event is available and deal with it
 					if (key.isAcceptable()) {
 						this.accept(key);
@@ -145,6 +159,7 @@ public class Server implements Runnable {
 		this.readBuffer.get(buff);
 		// Hand the data off to our worker thread
 		DataPacket sendPacket = new DataPacket(this, socketChannel, buff);
+		sendPacket.Tmw = System.nanoTime();
 		this.myMW.processData(sendPacket, numRead);
 		key.interestOps(0);
 	}
@@ -186,15 +201,15 @@ public class Server implements Runnable {
 	
 //	public static void main(String[] args) throws NoSuchAlgorithmException, IOException{
 //	List<String> addresses = new ArrayList<String>();
-//	String ip1 = "192.168.0.40:11212";
-//	String ip2 = "192.168.0.40:11213";
-//	String ip3 = "192.168.0.40:11214";
-//	String ip4 = "192.168.0.40:11215";
+//	String ip1 = "192.168.0.41:11212";
+//	String ip2 = "192.168.0.41:11213";
+//	String ip3 = "192.168.0.41:11214";
+//	String ip4 = "192.168.0.41:11215";
 //	addresses.add(ip1);
 //	addresses.add(ip2);
 //	addresses.add(ip3);
 //	addresses.add(ip4);
-//	new Thread(new Server("192.168.0.11", 9090, addresses, 4, 3)).run();
+//	new Thread(new Manager("192.168.0.14", 9090, addresses, 1, 3)).run();
 //	}
 
 }

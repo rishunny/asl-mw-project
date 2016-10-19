@@ -1,12 +1,8 @@
 import java.io.IOException;
 import java.net.UnknownHostException;
-import java.nio.ByteBuffer;
-import java.nio.channels.SocketChannel;
 import java.security.NoSuchAlgorithmException;
 import java.util.HashMap;
 import java.util.List;
-import java.util.concurrent.ArrayBlockingQueue;
-import java.util.concurrent.TimeUnit;
 
 public class MiddleWare{
 	private int numReplications;
@@ -47,19 +43,28 @@ public class MiddleWare{
 			//System.out.println("Command set: "+ data_string);
 			List<String> serverAddresses = hashKeytoServer.getWithReplication(key, numReplications);
 			sendPacket.setReplicaServers(serverAddresses);
-			//System.out.println(serverAddresses);
 			QueuePointer.get(serverAddresses.get(0)).setQueue.put(sendPacket);
+			sendPacket.Tqueue = System.nanoTime();
 			QueuePointer.get(serverAddresses.get(0)).asyncClient.modifySelector();
+			sendPacket.manager.setcounter++;
 		}
 		else if(command.equals("get"))
 		{
 			//call consistent hash and get the list of IP,port for replications
 			//System.out.println("Command get: "+ data_string);
 			String serverAddress = hashKeytoServer.get(key);
+			sendPacket.Tqueue = System.nanoTime();
 			QueuePointer.get(serverAddress).getQueue.put(sendPacket);
+			sendPacket.manager.getcounter++;
 		}
 		else if(command.equals("delete"))
 		{
+			List<String> serverAddresses = hashKeytoServer.getWithReplication(key, numReplications);
+			sendPacket.setReplicaServers(serverAddresses);
+			//System.out.println(serverAddresses);
+			QueuePointer.get(serverAddresses.get(0)).setQueue.put(sendPacket);
+			sendPacket.Tqueue = System.nanoTime();
+			QueuePointer.get(serverAddresses.get(0)).asyncClient.modifySelector();
 		}
 		else
 		{
