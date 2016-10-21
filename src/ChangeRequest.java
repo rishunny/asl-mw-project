@@ -1,5 +1,9 @@
 import java.nio.channels.SocketChannel;
 
+/*
+ * This class manages the interest operations in selection keys 
+ * in the Manager class.
+ */
 public class ChangeRequest {
 	public static final int REGISTER = 1;
 	public static final int CHANGEOPS = 2;

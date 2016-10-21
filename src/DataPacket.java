@@ -1,6 +1,15 @@
 import java.nio.channels.SocketChannel;
 import java.util.List;
 
+/*
+ * This class represents the request in the architecture diagram.
+ *  It has an instance of the Manager class and the socket channel 
+ *  connecting to the memaslap client. It also contains the actual r
+ *  ead/write request, the servers it has to write to, in case of 
+ *  replication, and also stores the instrumentation
+ *   measurements (e.g. Tmw, Tqueue, Tserver and Fsuccess) 
+ * */
+
 public class DataPacket {
 	public Manager manager;
 	public SocketChannel socket;

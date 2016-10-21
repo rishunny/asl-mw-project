@@ -14,31 +14,44 @@ import java.util.logging.Logger;
 import java.util.logging.Level;
 import java.util.logging.SimpleFormatter;
 
+/*
+ * This class is responsible for communicating with the memaslap clients. 
+ * It initiates the connection, gets the requests from the clients and forwards
+ *  it to the Middleware object and finally sends back the response from the 
+ *  worker threads to the memaslap clients. It also maintains a counter 
+ *  of the number of set and get requests that is later used to sample 
+ *  the requests for logging.
+ */
+
 public class Manager implements Runnable {
-	private MiddleWare myMW;
-	private InetAddress hostAddress;
+	private MiddleWare myMW; //Middleware instance
+	private InetAddress hostAddress; 
 	private int port;
 
 	public List<String> mcAddresses;
 	private int numThreadsPTP;
 	private int writeToCount;
 
-	// The channel on which we'll accept connections
+	// The channel on which connections are accepted
 	private ServerSocketChannel serverChannel;
 
-	// The selector we'll be monitoring
+	// The selector that will be monitored
 	private Selector selector;
 
-	// The buffer into which we'll read data when it's available
+	// The buffer into which data is read data when it's available
 	private ByteBuffer readBuffer = ByteBuffer.allocate(2048);
-	// A list of PendingChange instances
+	// A list of pending change instances
 	private List pendingChanges = new LinkedList();
 
 	// Maps a SocketChannel to a list of ByteBuffer instances
 	private Map pendingData = new HashMap();
 	
+	//counter to keep track of the number of set requests
 	public long setcounter = 0;
+	
+	//counter to keep track of the number of set requests
 	public long getcounter = 0;
+	
 	public Logger myLogger = Logger.getLogger("MiddleWare");
 	private SimpleFormatter simpleFormatter = new SimpleFormatter();
 	
@@ -58,15 +71,14 @@ public class Manager implements Runnable {
 
 	}
 
+	//Before we write, we need to know that the channel is ready for more data
 	public void send(SocketChannel socket, byte[] data) {
 		synchronized (this.pendingChanges) {
-			// And queue the data we want written
+			// Queue the data to be written
 			synchronized (this.pendingData) {
-				// Indicate we want the interest operation set changed
+				// Set a request to change the interest operation and add the data to be written back
 				this.pendingChanges.add(new ChangeRequest(socket, ChangeRequest.CHANGEOPS, SelectionKey.OP_WRITE));
 				this.pendingData.put(socket, ByteBuffer.wrap(data));
-				//System.out.println(new Timestamp(System.currentTimeMillis()) + " Data sent to server: "+new String(data));
-				// Finally, wake up our selecting thread so it can make the required changes
 				this.selector.wakeup();
 			}
 		}
@@ -76,7 +88,7 @@ public class Manager implements Runnable {
 	public void run() {
 		while (true) {
 			try {
-				// Process any pending changes
+				//Process any pending changes
 				synchronized (this.pendingChanges) {
 					Iterator changes = this.pendingChanges.iterator();
 					while (changes.hasNext()) {
@@ -117,14 +129,14 @@ public class Manager implements Runnable {
 	}
 
 	private void accept(SelectionKey key) throws IOException {
-		// For an accept to be pending the channel must be a server socket channel.
+		// For an accept to be pending, the channel must be a server socket channel
 		ServerSocketChannel serverSocketChannel = (ServerSocketChannel) key.channel();
 
 		// Accept the connection and make it non-blocking
 		SocketChannel socketChannel = serverSocketChannel.accept();
 		socketChannel.configureBlocking(false);
 
-		// Register the new SocketChannel with our Selector, indicating
+		// Register the new SocketChannel with the Selector, indicating
 		// we'd like to be notified when there's data waiting to be read
 		socketChannel.register(this.selector, SelectionKey.OP_READ);
 	}
@@ -148,8 +160,6 @@ public class Manager implements Runnable {
 		}
 
 		if (numRead == -1) {
-			// Remote entity shut the socket down cleanly. Do the
-			// same from our end and cancel the channel.
 			key.channel().close();
 			key.cancel();
 			return;
@@ -157,10 +167,13 @@ public class Manager implements Runnable {
 		byte[] buff = new byte[this.readBuffer.position()];
 		this.readBuffer.flip();
 		this.readBuffer.get(buff);
-		// Hand the data off to our worker thread
+		// Prepare the data with a DataPacket instance and forward it to the 
+		// instance of the Middleware
 		DataPacket sendPacket = new DataPacket(this, socketChannel, buff);
+		//Start the time for Tmw as the request is received
 		sendPacket.Tmw = System.nanoTime();
 		this.myMW.processData(sendPacket, numRead);
+		// Register an interest in writing on this channel
 		key.interestOps(0);
 	}
 
@@ -169,15 +182,12 @@ public class Manager implements Runnable {
 
 		synchronized (this.pendingData) {
 				ByteBuffer buf = (ByteBuffer) this.pendingData.get(socketChannel);
+				//write back the response to the memaslap client
 				socketChannel.write(buf);
-				//System.out.println("Sent to memaslap: "+new String(buf.array()));
+				//register an interest in reading on this channel
 				key.interestOps(SelectionKey.OP_READ);
 
 			}
-
-			// We wrote away all data, so we're no longer interested
-			// in writing on this socket. Switch back to waiting for
-			// data.
 	}
 
 	private Selector initSelector() throws IOException {
@@ -199,17 +209,4 @@ public class Manager implements Runnable {
 		return socketSelector;
 	}
 	
-//	public static void main(String[] args) throws NoSuchAlgorithmException, IOException{
-//	List<String> addresses = new ArrayList<String>();
-//	String ip1 = "192.168.0.41:11212";
-//	String ip2 = "192.168.0.41:11213";
-//	String ip3 = "192.168.0.41:11214";
-//	String ip4 = "192.168.0.41:11215";
-//	addresses.add(ip1);
-//	addresses.add(ip2);
-//	addresses.add(ip3);
-//	addresses.add(ip4);
-//	new Thread(new Manager("192.168.0.14", 9090, addresses, 1, 3)).run();
-//	}
-
 }

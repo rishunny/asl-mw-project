@@ -9,27 +9,42 @@ import java.nio.channels.spi.SelectorProvider;
 import java.util.*;
 import java.util.concurrent.ArrayBlockingQueue;
 
+/*
+ * This class gets the requests from the write queue and processes them 
+ * asynchronously. Since, the write requests may have to be replicated 
+ * to secondary servers, it fetches the response from all the corresponding 
+ * servers and checks for errors (if any). The response is then sent 
+ * back through the send method from the Manager1 instance to the 
+ * primary server.
+ */
+
 public class AsynchronousClient implements Runnable {
-	//Global ArrayList of type datapacket, store everything from queue here
-	//Delete data after each request has been satisfied
-	//For replication, have a HashMap
 	private InetAddress hostAddress;
 	private int port;
+	//This is the local queue where we store the DataPackets whose requests haven't
+	//completed
 	private ArrayBlockingQueue<DataPacket> setQueue;
 	private DataPacket packet;
 	private ArrayList<DataPacket> checkPackets= new ArrayList<DataPacket>();
 	private SocketChannel socketChannel;
 	private int numReplications;
+	
+	//This HashMap maps each socketChannel to the number of requests it is waiting for inside the local queue
 	private HashMap<SocketChannel, Integer> requestCount = new HashMap<SocketChannel, Integer>();
+	
+	//This HashMap monitors the number of responses received by each DataPacket, once this number 
+	//equals the numReplications, the response is sent by by the socket of the primary server
 	private HashMap<DataPacket, Integer> replicationCounter = new HashMap<DataPacket, Integer>();
+	
+	//This HashMap maps each IP:PORT tuple to its corresponding socket
 	private HashMap<String, SocketChannel> AddresstoSocket = new HashMap<String, SocketChannel>();
 	private ByteBuffer readBuffer = ByteBuffer.allocate(2048);
 	private Selector selector;
+	//This byte array stores the correct response
 	private byte[] storedmessage;
+	//This byte array stores the incorrect response
 	private byte[] errormessage;
-	// internal queue 
-	//make HashMap of counter and socket 
-	//HashMap of datapacket and global replication
+
 	public AsynchronousClient(String hostAddress, int numReplications, ArrayBlockingQueue<DataPacket> setQueue, List<String> mcAddresses) throws IOException {
 		this.setQueue = setQueue;
 		this.hostAddress = InetAddress.getByName(hostAddress.split(":")[0]);
@@ -64,14 +79,20 @@ public class AsynchronousClient implements Runnable {
 	public void run() {
 		while (true) {
 			try {	
+				//Since the take method blocks the Queue until a value is available, we 
+				//use poll instead for asynchronous behaviour
+				//get the DataPacket instance from the queue
 				packet = this.setQueue.poll();
 				if(packet!=null)
 				{
 					checkPackets.add(packet);
+					//Stop the time for Tqueue as the request is dequeued
 					packet.Tqueue = System.nanoTime() - packet.Tqueue;
 					replicationCounter.put(packet, 0);
+					//Start the time for Tserver as the request is processed by the server
 					packet.Tserver = System.nanoTime();
 					this.socketChannel.write(ByteBuffer.wrap(packet.data));
+					//register an interest in reading on this channel
 					this.socketChannel.keyFor(this.selector).interestOps(SelectionKey.OP_READ);
 					if(this.numReplications > 1)
 					{
@@ -126,8 +147,6 @@ public class AsynchronousClient implements Runnable {
 		}
 
 		if (numRead == -1) {
-			// Remote entity shut the socket down cleanly. Do the
-			// same from our end and cancel the channel.
 			return;
 		}
 		if(!checkPackets.isEmpty())
@@ -135,61 +154,70 @@ public class AsynchronousClient implements Runnable {
 			byte[] receivedData = new byte[readBuffer.position()];
 			this.readBuffer.flip();
 			this.readBuffer.get(receivedData);
-			//System.out.println("Data from memcached: "+new String(receivedData));
+			
+			//Since we may get multiple responses, we parse the response
 			String[] newdata = new String(receivedData).split("\n");
-			//			if(newdata.length > 1)
-			//				System.out.println("Length of response: " + newdata.length);
 			int reqCount = requestCount.get(socketChannel);
+			//We update the number of requests for the current socketChannel
 			requestCount.put(socketChannel, reqCount+newdata.length);
 			for(int j = reqCount; j < requestCount.get(socketChannel) && j >= 0; j++)
 			{
+				//Get a DataPacket from the local queue
 				DataPacket newpacket = checkPackets.get(j);
+				//Since the responses are ordered, the first response belongs to the first element
+				//in the local queue
 				int repCount = replicationCounter.get(newpacket);
+				//Increase the replication count
 				repCount = repCount + 1;
 				if(newdata[j-reqCount].contains("NOT_STORED") || newdata[j-reqCount].contains("NOT_FOUND"))
 				{
 					newpacket.ERROR_MESSAGE = true;
 					this.errormessage = (newdata[j-reqCount]+"\n").getBytes();
-					//System.out.println(newdata[j-reqCount]);
 				}
 				else
 				{
 					this.storedmessage = (newdata[j-reqCount]+"\n").getBytes();
-					//System.out.println(newdata[j-reqCount]);
 				}
+				//When replication counter is equal to numReplications, send the response back
 				if(repCount == this.numReplications)
 				{
+					//remove the DataPacket's replication count from the HashMap
 					replicationCounter.remove(newpacket);
+					//Stop the time for Tserver as all the response/s for the request is/are received
 					newpacket.Tserver = System.nanoTime() - newpacket.Tserver;
+					//Stop the time for Tmw as the request is now sent back to memaslap
 					newpacket.Tmw = System.nanoTime() - newpacket.Tmw;
+					
+					//If any response had an error message, we send the error message back
 					if(newpacket.ERROR_MESSAGE){
-						//System.out.println("Incorrect: "+ new String(errormessage.array()));
 						newpacket.Fsuccess = false;
 						newpacket.manager.send(newpacket.socket, this.errormessage);
 					}
 					else
 					{
-						//System.out.print("Correct: "+ new String(newdata[j-reqCount].getBytes()));
 						newpacket.manager.send(newpacket.socket, this.storedmessage);
 					}
+					
+					//Log once every 100 iterations
 					if(newpacket.manager.setcounter%100 == 0)
 					{
-						// String logMsg = String.format("SET %d %d %d %d", , time2);
 						String logMsg = String.format("SET "+ newpacket.Tmw/1000 + " " + newpacket.Tqueue/1000 + " " + newpacket.Tserver/1000 + " " + newpacket.Fsuccess);
 						newpacket.manager.myLogger.info(logMsg);
 					}
-
-					//remove loops
+					//Update the request counts for all the sockets
 					for(String node: newpacket.replicaServers)
 					{
 						SocketChannel tmpRepSocket = AddresstoSocket.get(node);
 						int tmpreqCount = requestCount.get(tmpRepSocket);
 						requestCount.put(tmpRepSocket, tmpreqCount-1);
 					}
+					//remove the packet from the local queue as it has received all its responses
 					checkPackets.remove(j);
 					j = j - 1;
 					reqCount = reqCount - 1;
 				}
+				//If replication counter hasn't reached numReplications, just update the new count
+				// and continue
 				else
 				{
 					replicationCounter.put(newpacket,repCount);
@@ -204,11 +232,9 @@ public class AsynchronousClient implements Runnable {
 		if(checkPackets.size()>0){
 			packet = checkPackets.get(checkPackets.size()-1);
 			ByteBuffer buf = ByteBuffer.wrap(packet.data);
-			//			System.out.println("Data written:" + new String(packet.data) + "Key: " + socketChannel);
 			socketChannel.write(buf);
-			// We wrote away all data, so we're no longer interested
-			// in writing on this socket. Switch back to waiting for
-			// data.
+			// Since the data has been written,
+			// register an interest in reading on this channel
 			key.interestOps(SelectionKey.OP_READ);
 		}
 	}
@@ -229,12 +255,13 @@ public class AsynchronousClient implements Runnable {
 		}
 	}
 
+	//wakeup the selector
 	public void modifySelector(){
 		this.selector.wakeup();
 	}
 
 	private SocketChannel initiateConnection(InetAddress hostAddress, int port) throws IOException {
-		// Create a non-blocking socket channel
+		// Create a non-blocking socket channel as it is asynchronous
 		SocketChannel socketChannel = SocketChannel.open();
 		socketChannel.configureBlocking(false);
 		socketChannel.register(this.selector, SelectionKey.OP_CONNECT);
