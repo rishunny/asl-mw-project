@@ -57,7 +57,7 @@ public class SynchronousClient implements Runnable {
 					packet.Fsuccess = false;
 				}
 				packet.manager.send(packet.socket, response);
-				if(packet.manager.getcounter%10000 == 0)
+				if(packet.manager.getcounter%100 == 0)
 				{
 					String logMsg = String.format("GET "+ packet.Tmw/1000 + " " + packet.Tqueue/1000 + " " + packet.Tserver/1000 + " " + packet.Fsuccess);
 					packet.manager.myLogger.info(logMsg);
